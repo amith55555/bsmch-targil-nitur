@@ -4,11 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-  "dev": "vite --host",
-  "build": "tsc && vite build",
-  "preview": "vite preview"
+    "dev": "vite --host",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
+    "@grafana/faro-web-sdk": "^2.7.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { faro, LogLevel } from '@grafana/faro-web-sdk';
 
-// Define a type for our backend response to leverage TypeScript
 interface BackendResponse {
   message?: string;
   error?: string;
@@ -9,7 +9,6 @@ interface BackendResponse {
 const BACKEND_URL = 'http://localhost:3040';
 
 function App() {
-  // React State to hold our result message and text color
   const [result, setResult] = useState<string>('Waiting for action...');
   const [statusColor, setStatusColor] = useState<string>('#333');
 
@@ -17,6 +16,9 @@ function App() {
     setResult('Loading...');
     setStatusColor('#333');
     
+    // Send an informational log to Loki via Faro
+    faro.api.pushLog(['Success button clicked by user'], { level: LogLevel.INFO });
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/success`);
       const data: BackendResponse = await response.json();
@@ -33,6 +35,9 @@ function App() {
     setResult('Loading...');
     setStatusColor('#333');
 
+    // Send a warning log to Loki via Faro
+    faro.api.pushLog(['Failure button clicked - expecting 404'], { level: LogLevel.WARN });
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/does-not-exist`);
       const data: BackendResponse = await response.json();
@@ -46,36 +51,39 @@ function App() {
   };
 
   return (
-    <div style={{ fontFamily: 'sans-serif', textAlign: 'center', marginTop: '50px' }}>
-      <h2>React + TS Frontend</h2>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '500px', margin: '0 auto' }}>
+      <h1>Frontend Observability Test</h1>
+      <p>Interact with the buttons below to fire actions and ship logs to Faro/Loki.</p>
       
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         <button 
           onClick={handleSuccess} 
-          style={{ padding: '10px 20px', margin: '10px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+          style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         >
-          Success Button
+          Trigger Success
         </button>
         
         <button 
           onClick={handleFailure} 
-          style={{ padding: '10px 20px', margin: '10px', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+          style={{ padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         >
-          Failure Button
+          Trigger Failure
         </button>
       </div>
 
-      <div style={{ 
-        marginTop: '20px', 
-        padding: '20px', 
-        border: '1px solid #ccc', 
-        display: 'inline-block', 
-        minWidth: '300px',
-        fontWeight: 'bold',
-        color: statusColor,
-        whiteSpace: 'pre-wrap' // Ensures the \n in our text renders as a line break
-      }}>
-        {result}
+      <div style={{ marginTop: '20px' }}>
+        <h3>Execution Result:</h3>
+        <pre 
+          style={{ 
+            padding: '15px', 
+            backgroundColor: '#f8f9fa', 
+            borderLeft: `5px solid ${statusColor}`, 
+            whiteSpace: 'pre-wrap',
+            borderRadius: '4px'
+          }}
+        >
+          {result}
+        </pre>
       </div>
     </div>
   );

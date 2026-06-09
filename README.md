@@ -1,101 +1,59 @@
-# Full-Stack React & Node.js App with Grafana Observability
+# Branch: `feat/add-frontend-faro`
 
-This project contains a completely separated frontend and backend application. The core applications are containerized using standard Dockerfiles and are designed to be run independently using raw Docker CLI commands, giving you full control over the build and execution process.
+## 🎯 The Task
+The objective of this task is to instrument our React frontend to capture browser telemetry and custom user events, and securely route that data into our observability stack.
 
-An optional, production-grade observability stack (Grafana, Loki, Tempo, Mimir, Pyroscope) is also included for monitoring and debugging.
-
----
-
-## 🏗️ Architecture & Services
-
-### Application Layer (Standalone Containers)
-* **Backend (`/backend-app`):** A Node.js API server that handles requests from the frontend and returns JSON data.
-* **Frontend (`/react-frontend`):** A React/TypeScript application built with Vite. It is compiled into static files and served efficiently using a lightweight Nginx container.
-
-### Observability Layer (Docker Compose)
-* **Grafana:** The central visualization dashboard. Configured for anonymous admin access (no login required for local development).
-* **Loki:** Log aggregation system.
-* **Tempo:** Distributed tracing backend.
-* **Mimir:** Scalable time-series database for metrics.
-* **Pyroscope:** Continuous profiling for performance analysis.
+Specifically, this branch accomplishes the following:
+1. Deploys Grafana Alloy as a lightweight pipeline to receive frontend telemetry.
+2. Instruments the React application with the Grafana Faro Web SDK.
+3. Implements custom, structured logging for user interactions (button clicks).
+4. Forwards the frontend logs securely to our existing Loki database under the `devops-sre` tenant.
+5. Manually configures the Loki datasource in the Grafana UI to query and visualize the browser data.
 
 ---
 
-## 🚀 Getting Started with the Application
-
-### Prerequisites
-* [Docker Desktop](https://www.docker.com/products/docker-desktop/) must be installed and running on your machine.
-
-### 1. Build and Run the Backend
-
-The backend must be started first so the frontend has an API to communicate with. 
-
-Navigate to the root directory of your project and build the backend image:
-```bash
-docker build -t my-backend ./backend-app
-```
-
-Run the backend container on port 3040:
-```bash
-docker run -d -p 3040:3040 --name backend my-backend
-```
-*The backend API is now reachable at `http://localhost:3040`.*
-
-### 2. Build and Run the Frontend
-
-With the backend running, build the frontend image:
-```bash
-docker build -t my-frontend ./react-frontend
-```
-
-Run the frontend container, mapping your local port `5173` to the container's internal Nginx port `80`:
-```bash
-docker run -d -p 5173:80 --name frontend my-frontend
-```
-*The frontend UI is now reachable at `http://localhost:5173`.*
+## 🛠️ Tools & Packages Used
+* **`@grafana/faro-web-sdk` (npm package):** The official Grafana SDK used inside the React app to automatically capture Web Vitals, console logs, unhandled errors, and custom application logs.
+* **Grafana Alloy:** A vendor-neutral telemetry collector configured to act as a bridge. It receives the Faro payloads via HTTP and translates them into a format Loki understands.
+* **Docker & Docker Compose:** Used to spin up the new Alloy container and manage network routing (`host.docker.internal`).
+* **Grafana & Loki:** Used as the backend storage database and visualization layer for the log streams.
 
 ---
 
-## 🛑 Stopping and Cleaning Up
+## ✅ What We Did (Step-by-Step Solution)
 
-To stop the applications from running in the background, use the following command:
+### Step 1: Deploying Grafana Alloy
+1. **Create Configuration:** Created a new `alloy/config.alloy` file defining a simple pipeline:
+   * **Receiver:** Configured a `faro.receiver` listening on port `12347`. Crucially, added `cors_allowed_origins` for `http://localhost:5173` so the browser wouldn't block the requests.
+   * **Exporter:** Configured a `loki.write` endpoint targeting our host's Loki instance (`http://host.docker.internal:3100/loki/api/v1/push`).
+   * **Tenant Isolation:** Injected the `tenant_id = "devops-sre"` directly into the Loki write block to ensure the logs route to our specific bucket.
+2. **Update Infrastructure:** Added the `alloy` service to the root `docker-compose.yml`, mapped ports `12347` (Faro) and `12345` (UI), and added `host.docker.internal:host-gateway` to the `extra_hosts` so Alloy could resolve the host network.
 
-```bash
-docker stop backend frontend
-```
+### Step 2: Instrumenting the React Frontend
+1. **Install SDK:** Ran `npm install @grafana/faro-web-sdk` in the `/react-frontend` directory.
+2. **Initialize Faro:** Updated `main.tsx` to call `initializeFaro()` before the React tree renders. 
+   * Configured it to push data to Alloy at `http://localhost:12347/collect`.
+   * Explicitly set the app name to `react-frontend-ui` to act as our core service identifier.
+3. **Add Custom Logs:** Updated the button click handlers in `App.tsx` to push explicit, structured logs (`faro.api.pushLog`) using the strict `LogLevel.INFO` and `LogLevel.WARN` enums before firing network requests.
 
-If you want to completely remove the containers so you can rebuild them from scratch, run:
-```bash
-docker rm backend frontend
-```
+### Step 3: Configuring the Datasource in Grafana UI
+With the frontend successfully shipping logs through Alloy into Loki, we connected Grafana to read them:
+1. Navigated to **Connections > Data sources** and selected **Loki**.
+2. **URL:** Configured the URL as `http://loki:3100` (utilizing the internal Docker bridge network for secure Grafana-to-Loki communication).
+3. **Authentication:** Added a Custom HTTP Header with Key: `X-Scope-OrgID` and Value: `devops-sre`.
+4. Clicked **Save & test** to verify the connection.
 
 ---
 
-## 📊 Optional: Running the Observability Stack
+## 🔍 Verification: Test Your Logs!
 
-If you wish to monitor your applications, you can spin up the Grafana observability suite alongside your standalone containers. Because this involves 5 interconnected services, it is orchestrated via Docker Compose.
+To ensure the entire frontend-to-backend pipeline works end-to-end:
 
-### Prerequisites for Observability
-Ensure the following empty (or configured) configuration files exist in your root directory next to `docker-compose.yml`, otherwise Docker will fail to mount the volumes:
-* `loki.yaml`
-* `tempo.yaml`
-* `mimir.yaml`
-* `pyroscope.yaml`
-
-### Start the Stack
-Run the following command in your root directory:
-```bash
-docker-compose up -d
-```
-
-### Accessing Observability Tools
-* **Grafana UI:** `http://localhost:3001`
-* **Loki:** `3100`
-* **Tempo:** `3200` (HTTP), `4317` (OTLP gRPC), `4318` (OTLP HTTP)
-* **Mimir:** `9009`
-* **Pyroscope:** `4040`
-
-To stop the observability stack, run:
-```bash
-docker-compose down
-```
+1. **Generate Telemetry:** Open the React frontend (`http://localhost:5173`) and click both the "Success" and "Failure" buttons a few times.
+2. **Verify in Grafana:** * Open Grafana (`http://localhost:3001`) and navigate to **Explore**.
+   * Select the **Loki** data source.
+   * Run the following LogQL query to isolate the frontend application:
+     ```logql
+     {app="react-frontend-ui"}
+     ```
+   * **Success:** You should see a rich stream of logs, including your custom `"Success button clicked by user"` messages, bundled with automatic browser metadata!
