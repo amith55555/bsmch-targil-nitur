@@ -1,0 +1,42 @@
+// Enable real-time streaming to the Alloy UI
+livedebugging {
+  enabled = true
+}
+
+// 1. Receive OTLP data from the Node.js backend
+otelcol.receiver.otlp "default" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  output {
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+// 2. Batch the traces (Best practice for performance)
+otelcol.processor.batch "default" {
+  output {
+    traces  = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// 3. Export to Tempo over the Docker internal network
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "http://host.docker.internal:4318"
+    
+    tls {
+      insecure             = true
+      insecure_skip_verify = true
+    }
+    
+    // Inject your specific SRE tenant ID
+    headers = {
+      "X-Scope-OrgID" = "devops-sre",
+    }
+  }
+}
