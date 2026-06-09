@@ -1,17 +1,43 @@
+// 1. Receive Telemetry from the Frontend
 faro.receiver "default" {
   server {
     listen_address = "0.0.0.0"
     listen_port    = 12347
-    
-    // Explicitly allow your React frontend to send data here
     cors_allowed_origins = ["http://localhost:5173"]
   }
 
   output {
-    logs = [loki.write.default.receiver]
+    // Route logs to the processor instead of directly to Loki
+    logs = [loki.process.extract_metadata.receiver]
   }
 }
 
+// 2. The Processing Pipeline (Extraction & Promotion)
+loki.process "extract_metadata" {
+  // Tell the processor where to send the logs when it is done
+  forward_to = [loki.write.default.receiver]
+
+  // Step A: Extract the variables from the logfmt payload
+  stage.logfmt {
+    mapping = {
+      // "Look for 'app_name' in the log and save it as 'extracted_app'"
+      extracted_app = "app_name",
+      
+      // "Look for 'app_environment' in the log and save it as 'extracted_env'"
+      extracted_env = "app_environment",
+    }
+  }
+
+  // Step B: Promote those extracted variables to permanent Loki Labels
+  stage.labels {
+    values = {
+      service_name = "extracted_app",
+      environment  = "extracted_env",
+    }
+  }
+}
+
+// 3. Write to Loki
 loki.write "default" {
   endpoint {
     url       = "http://host.docker.internal:3100/loki/api/v1/push"
