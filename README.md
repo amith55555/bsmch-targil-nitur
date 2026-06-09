@@ -1,4 +1,4 @@
-# Branch: `task/add-backend-metrics`
+# Branch: `feat/add-backend-metrics`
 
 ## 🎯 The Task
 The objective of this task is to instrument our Node.js backend with Prometheus metrics, integrate it into our observability stack, and verify the data flow. 
