@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 1. Scrape the Node.js backend
+  - job_name: 'nodejs_backend'
+    static_configs:
+      - targets: ['host.docker.internal:3040']
+
+remote_write:
+  # 2. Push the scraped metrics to Mimir
+  - url: 'http://host.docker.internal:9009/api/v1/push'
+    headers:
+      # 3. Inject the tenant ID
+      X-Scope-OrgID: 'devops-sre'

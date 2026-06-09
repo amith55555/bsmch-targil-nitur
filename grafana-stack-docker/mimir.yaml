@@ -12,3 +12,13 @@ blocks_storage:
 
 compactor:
   data_dir: /tmp/mimir/compactor
+
+
+ingester:
+  ring:
+    replication_factor: 1
+
+# Configure the store-gateway to only require 1 replica
+store_gateway:
+  sharding_ring:
+    replication_factor: 1

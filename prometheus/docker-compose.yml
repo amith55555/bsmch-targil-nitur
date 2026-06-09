@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_scraper
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # extra_hosts is required on some Linux/WSL setups to ensure host.docker.internal resolves correctly
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

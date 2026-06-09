@@ -1,101 +1,61 @@
-# Full-Stack React & Node.js App with Grafana Observability
+# Branch: `task/add-backend-metrics`
 
-This project contains a completely separated frontend and backend application. The core applications are containerized using standard Dockerfiles and are designed to be run independently using raw Docker CLI commands, giving you full control over the build and execution process.
+## 🎯 The Task
+The objective of this task is to instrument our Node.js backend with Prometheus metrics and integrate it into our observability stack. 
 
-An optional, production-grade observability stack (Grafana, Loki, Tempo, Mimir, Pyroscope) is also included for monitoring and debugging.
-
----
-
-## 🏗️ Architecture & Services
-
-### Application Layer (Standalone Containers)
-* **Backend (`/backend-app`):** A Node.js API server that handles requests from the frontend and returns JSON data.
-* **Frontend (`/react-frontend`):** A React/TypeScript application built with Vite. It is compiled into static files and served efficiently using a lightweight Nginx container.
-
-### Observability Layer (Docker Compose)
-* **Grafana:** The central visualization dashboard. Configured for anonymous admin access (no login required for local development).
-* **Loki:** Log aggregation system.
-* **Tempo:** Distributed tracing backend.
-* **Mimir:** Scalable time-series database for metrics.
-* **Pyroscope:** Continuous profiling for performance analysis.
+Specifically, this branch accomplishes the following:
+1. Exposes a `/metrics` endpoint on the backend.
+2. Enables automatic instrumentation for default system and HTTP metrics.
+3. Implements a custom counter metric that increments by `1` every time the `/api/success` endpoint is hit.
+4. Deploys a local Prometheus scraper to pull these metrics and forward them to our existing Mimir time-series database under a specific tenant.
 
 ---
 
-## 🚀 Getting Started with the Application
-
-### Prerequisites
-* [Docker Desktop](https://www.docker.com/products/docker-desktop/) must be installed and running on your machine.
-
-### 1. Build and Run the Backend
-
-The backend must be started first so the frontend has an API to communicate with. 
-
-Navigate to the root directory of your project and build the backend image:
-```bash
-docker build -t my-backend ./backend-app
-```
-
-Run the backend container on port 3040:
-```bash
-docker run -d -p 3040:3040 --name backend my-backend
-```
-*The backend API is now reachable at `http://localhost:3040`.*
-
-### 2. Build and Run the Frontend
-
-With the backend running, build the frontend image:
-```bash
-docker build -t my-frontend ./react-frontend
-```
-
-Run the frontend container, mapping your local port `5173` to the container's internal Nginx port `80`:
-```bash
-docker run -d -p 5173:80 --name frontend my-frontend
-```
-*The frontend UI is now reachable at `http://localhost:5173`.*
+## 🛠️ Tools & Packages Used
+* **`prom-client` (npm package):** The official Prometheus client for Node.js. This is the sole external dependency added to the backend to generate, format, and serve the metrics.
+* **Vanilla Node.js (`http` module):** The backend relies entirely on Node's native `http` module to serve the API and metrics endpoints, keeping the container incredibly lightweight without needing frameworks like Express.
+* **Docker:** Used to rebuild the backend container with the new dependencies and to run the standalone scraper.
+* **Prometheus:** Configured as a lightweight agent to scrape the backend and use `remote_write` to push data.
+* **Grafana & Mimir:** Used as the storage backend and visualization layer for the scraped metrics.
 
 ---
 
-## 🛑 Stopping and Cleaning Up
+## ✅ What We Did (The Solution)
 
-To stop the applications from running in the background, use the following command:
+### 1. Backend Instrumentation
+* Initialized a `package.json` in the `/backend-app` directory and installed the `prom-client` package.
+* Updated `server.js` to include `promClient.collectDefaultMetrics()` for automatic system/HTTP instrumentation.
+* Created a custom Prometheus Counter named `backend_success_requests_total`.
+* Updated the `/api/success` route to increment this counter on every successful request.
+* Exposed the `/metrics` route to serve the formatted data.
 
-```bash
-docker stop backend frontend
-```
+### 2. Docker & Git Updates
+* Updated the backend `Dockerfile` to copy `package.json` and run `npm install` before executing the server.
+* Added a robust `.gitignore` to the `/backend-app` directory to prevent committing `node_modules` and potential `.env` files.
 
-If you want to completely remove the containers so you can rebuild them from scratch, run:
-```bash
-docker rm backend frontend
-```
+### 3. Prometheus Scraper Setup
+* Created a new `/prometheus` directory containing its own `docker-compose.yml`.
+* Wrote a `prometheus.yml` configuration file that:
+  * Scrapes the Node.js backend via `host.docker.internal:3040` every 15 seconds.
+  * Uses `remote_write` to push data directly to the Mimir container (`host.docker.internal:9009/api/v1/push`).
+  * Injects the `X-Scope-OrgID: devops-sre` HTTP header to properly route the data into our specific Mimir tenant.
+
+### 4. Grafana Integration
+* Configured Mimir as a Prometheus-type Data Source directly within the Grafana UI.
+* Injected the custom `X-Scope-OrgID` header into the Data Source configuration to authenticate as the `devops-sre` tenant.
+* Set the Prometheus version/type to "Mimir" to unlock native backend features.
 
 ---
 
-## 📊 Optional: Running the Observability Stack
+## 🔍 Verification: Test Your Metrics!
 
-If you wish to monitor your applications, you can spin up the Grafana observability suite alongside your standalone containers. Because this involves 5 interconnected services, it is orchestrated via Docker Compose.
+To ensure everything was wired up correctly, follow these steps:
 
-### Prerequisites for Observability
-Ensure the following empty (or configured) configuration files exist in your root directory next to `docker-compose.yml`, otherwise Docker will fail to mount the volumes:
-* `loki.yaml`
-* `tempo.yaml`
-* `mimir.yaml`
-* `pyroscope.yaml`
-
-### Start the Stack
-Run the following command in your root directory:
-```bash
-docker-compose up -d
-```
-
-### Accessing Observability Tools
-* **Grafana UI:** `http://localhost:3001`
-* **Loki:** `3100`
-* **Tempo:** `3200` (HTTP), `4317` (OTLP gRPC), `4318` (OTLP HTTP)
-* **Mimir:** `9009`
-* **Pyroscope:** `4040`
-
-To stop the observability stack, run:
-```bash
-docker-compose down
-```
+1. **Generate Traffic:** Open the React frontend (`http://localhost:5173`) and click the "Success Button" several times.
+2. **Check the Raw Metrics:** Navigate to `http://localhost:3040/metrics` in your browser. You should see a large list of text, including the `backend_success_requests_total` metric reflecting your clicks.
+3. **Check the Scraper:** Navigate to `http://localhost:9090/targets` and verify that the `nodejs_backend` endpoint is marked as **UP** (green).
+4. **View in Grafana:** * Open Grafana (`http://localhost:3001`).
+   * Go to **Explore** (the compass icon).
+   * Ensure your **Mimir** data source is selected.
+   * Run the query: `backend_success_requests_total`.
+   * **Success:** You should see a graph displaying the exact number of times you clicked the success button!
