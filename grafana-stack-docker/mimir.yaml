@@ -1,0 +1,14 @@
+multitenancy_enabled: true
+
+server:
+  http_listen_port: 9009
+
+blocks_storage:
+  backend: filesystem
+  bucket_store:
+    sync_dir: /tmp/mimir/tsdb-sync
+  filesystem:
+    dir: /tmp/mimir/data
+
+compactor:
+  data_dir: /tmp/mimir/compactor
